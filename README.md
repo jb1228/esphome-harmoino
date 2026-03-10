@@ -1,53 +1,182 @@
-# Harmoino
-The repository contains a minimal example illustrating how to receive commands from a Logitech Harmony remote using an Arduino (or equivalent) and an NRF24L01+ radio chip connected via the SPI interface. The repository also includes a bridge between the Harmony remote and an mqtt broker.
+# Harmoino ESPHome Component
 
-## What and why
-I created this repository after researching how to repurpose my Harmony remote in a home automation project. I always liked the simple (and now discontinued) Harmony remote sold with the Harmony (Smart) Hub. It is, in my view, an excellent remote with good ergonomics and battery life. I was never similarly fond of the activity-based control schemes used in the Harmony system, so I wanted to repurpose the remote for home automation without involving the hub or Harmony software. However, the present repository is designed only to provide a minimal starting point for others to get started with their projects without requiring additional equipment other than the Arduino or an ESP32 board, the NRF24L01+ chip, and a Harmony remote (and its hub for setup). I initially used a Rohde and Schwarz signal and spectrum analyzer to gather data from packets transmitted between the remote and hub, but this is expensive equipment not readily available. Instead, the repository now has most radio parameters built into the code and a simple method to query the Hub for the unique Hub remote nRF24 network address used for the communications.
+ESPHome `harmoino` component for capturing key presses events from Logitech Harmony remotes via an nRF24L01+ radio. This code is based on the Harmoino project from [@joakimjalden](https://github.com/joakimjalden/Harmoino) and [@pkscout](https://github.com/pkscout/Harmoino).
 
-## Usage
+This component is very much a "work in progress". 
 
-### Connecting the NRF24L01+ to the Arduino or ESP32 board
-The NRF24L01+ chip needs to be connected to the Arduino or ESP32 via the SPI interface. I recommend following the excellent [Simple nRF24L01+ 2.4GHz transceiver demo](https://forum.arduino.cc/t/simple-nrf24l01-2-4ghz-transceiver-demo/405123) by Robin2, which also provides some discussions on troubleshooting. The sketches provided with this repository should work with no hardware modification if the CE_PIN and CNS_PIN definitions in the code are set as in the simple nRF24L01+ tutorial.
+## Features
 
-### Retrieve the unique RF24 network address
-One needs to know the unique network address used by the hub and the remote to use the central sketch of the repository. This address is unique to any particular pair of remote and hub and can be changed when pairing the remote to a hub. While it should be possible to assign the remote to any chosen address, I have not yet researched the protocol sufficiently to know how to do this. Instead, one will have to receive the address from the hub.
+- Automatic Harmony RF Address Probing/Discovery
+  - Runtime probe control across all 12 Harmony RF channels via switch with automatic timeout
+  - Address and channel persistence in ESPHome preferences or provided in YAML config
+  - Automatically probe on startup if no existing address has been provided or saved
+- Automation hook (`on_event`) for processing key presses from remote
+  - Normal presses, repeats, click/double/multiple/long, and sleep
+  - Also has raw packet automation hook for protocol debugging
+- Optional ESPHome `event` entity for Home Assistant exposure
 
-Make sure the remote and hub are paired. The remote and hub should already be paired if you have a new remote or have not messed with your old one. If not, follow the instructions on [support.myharmony.com](https://support.myharmony.com/en-gb/how-to-re-pair-harmony-with-your-remote-or-keyboard). Once the remote and hub are paired, run the **NetworkAdress.ino** sketch with a 9600 baud serial monitor. Make sure the Harmony Hub is powered on and press the pair/reset button on the back of the hub. Within a second or two, the *unique network adress* to use in the following steps should be printed to the serial monitor. Note that you do not need to configure the hub to take these steps. If you have an already configured hub, the LED on the front should turn green when fully booted. If the hub is not configured and connected to WiFi the LED may flash read once booted, but you can still enter the pairing mode at this stage.
+## Address Workflow
 
-### Using the sketch to receive button presses from the remote
-Replace the dummy 0xFFFFFFFF address in the **SimpleHub.ino** sketch with the unique network address obtained in the previous step, and compile and run the sketch with a 9600 baud serial monitor. If all goes to plan, each RF24 packet transmitted from the remote should now be printed to the serial monitor. You will have to take it from here...
+The component chooses its active receiver address in this order:
 
-## The Harmony protocol in brief
-The Harmony Hub and remote are built around the [nRF24L01+ Single Chip 2.4GHz transciever](https://www.sparkfun.com/datasheets/Components/SMD/nRF24L01Pluss_Preliminary_Product_Specification_v1_0.pdf) and communicate using the Enhanced ShockBurst protocol. The remote is (primarily) in Tx mode, and the hub is in Rx mode. The communication rate is 2Mbps, with dynamic payloads, a 40-bit network address, and a 16-bit CRC.
+1. YAML `address`
+2. Saved runtime address
+3. No active receiver address
 
-The hub can listen to any one of 12 different radio channels (5, 8, 14, 17, 32, 35, 41, 44, 62, 65, 71, and 74). After being idle for a while, the remote will, upon a button press, try to reach the hub on all 12 channels before locking on to a single channel. In particular, if the unique 40-bit network address is 0x0AABBCCDDEE then the remote will first try to reach the hub at network address 0x0AABBCCDD00 until the hub acknowledges a packet received on whatever channel it was listening to. The first byte of the two first packets sent to this address will be 0xEE (the least significant byte of the network address), after which all remaining packets are sent to 0x0AABBCCDDEE with the first byte or each packet set to 0x00. The last byte of each packet in all communications is always chosen so that the bytes with a packet sum to 0 modulo 256. This seems a bit redundant to me, given that a 16-bit CRC already protects each packet, but who am I to judge? Each button press generates two 10-byte packets and then another two 10-byte packets once the remote is released. Only bytes 1 to 4 of the first packet seem unique to the button pressed. When a button is held down, the remote sends a 5-byte packet every 100ms or so, and when no button is held, another 5-byte packet every 1s or so for about 30s until the remote goes quiet and the process is restarted.
+When no active address is available, the component starts probing automatically on startup. Set `probe_on_startup: false` if you want it to stay healthy but idle until the probe switch is turned on.
 
-When pairing a remote and hub the remote sends a 22-byte packet to the (shared) address 0xBB0ADCA575 followed shortly by several 5-byte packets to which the hub responds using the ACK payload feature of the nRF24L01 transceiver to send back a 22-byte packet to the remote. The packet sent back to the remote contains the network address for regular communication. Thus, the hub provides the remote with the address to use and not the other way around. The NetworkAddress.ino sketch uses this feature to receive the network address from the hub but stops short of completing the pairing process. When pairing a remote with the regular hub, the network address is increased by one each time they are paired, but this does not happen when running the NetworkAddress.ino sketch, so there is more to it. A complete implementation of the pairing protocol should presumably enable giving the remote any network address and thus allow for pairing up to 5 remotes with a single Arduino by using the nRF24L01+ 6 data pipe MultiCeiver feature.
+When a probe succeeds, the component captures both the Harmony RF address and the RF channel that answered. If no YAML address is present and no saved runtime address exists yet, the discovered address/channel pair is saved automatically.
 
-Finally, it should be noted that the packets contain a lot more information than what would be needed in just implementing the remote functionality. However, I do not fully understand all aspects of this information. However, there seems to be some commonality between Harmony and Logitech wireless products, so this information will likely have more meaning for other products.
+Address discovery always scans the Harmony pairing channels:
 
-## Testing
+`5, 8, 14, 17, 32, 35, 41, 44, 62, 65, 71, 74`
 
-I have tested the scripts of the repository on an original Harmony branded Hub with the remote without a screen, and a more recent Logitech branded Harmony Companion remote (the one with buttons for smart home lights and switches) to make sure they work as intended. I have, however, not had access to the Logitech Harmony Ultimate All in One Remote with Customizable Touch Screen or older Harmony (RF) remotes. I would thus appreciate feedback if you could get it to work with one of these.
+Typical setup:
 
-## The MQTT hub sketch
+1. Flash the device with the `harmoino:` component configured, and boot it up.
+3. Put the Harmony Hub into pairing mode by pressing the rear pair/reset button.
+4. Wait for `discovered_address` to populate with `0xAABBCCDDEE`.
+5. If you already had a saved address and want to replace it manually, press `Save Harmony Address`.
 
-To make the project a bit more useful for home automation, the MQTT hub sketch provides a bridge between the Harmony remote and and MQTT broker, such as the Mosquitto broker in Home Assistant. The sole purpose of the hub is to translate nRF24L01 messages received from the remote to human readable short strings that can be pubslished to an MQTT topic of choice. The code needs to be set up by entering the nRF24L01 network key, along with the WiFi and MQTT credentials and MQTT topic.
+If you later add `address:` in YAML, that value wins over the saved runtime address.
 
-Each button on the Harmony remote is mapped to a unique short string found in the harmony_command_list in the code. Each button can be configured as one to three types (type 0, 1 or 2) depending on intended use, and to strike a balance between responsiveness and expressiveness. The function of the different types are described below.
+## Minimal Example
 
-#### Button type 0
+```yaml
+external_components:
+  - source: github://jb1228/esphome-harmoino
+    components: [harmoino]
 
-A type 0 button sends the MQTT string (paylodad) to the broker immediately as the button is pressed. If the button is released and pressed again, the string is sent again. This button has the potential to feel very responsive and is suitable for, for example, the left, right, up, and down buttons on the d-pad of the remote when these are used to traverse menus.
+spi:
+  clk_pin: GPIO18
+  miso_pin: GPIO19
+  mosi_pin: GPIO23
 
-#### Button type 1
+harmoino:
+  id: harmoino_receiver
+  ce_pin: GPIO16
+  cs_pin: GPIO17
+  probe_switch:
+    name: Probe Harmony Address
+  save_button:
+    name: Save Harmony Address
+  discovered_address:
+    name: Harmony Discovered Address
+  saved_address:
+    name: Harmony Saved Address
+  effective_address:
+    name: Harmony Effective Address
+  on_event:
+    - logger.log:
+        format: "Harmony event: %s"
+        args: ["x.c_str()"]
+```
 
-A type 1 works just like the type 0 button, with the addition that the button will repeadely send the MQTT string to the broker when the button is held down for a longer period. The rate at which the button message is pubished can be configured in the code, but setting the duration to the first resubmission and the duration between any following submissions. This type of button is suitabel for buttons like the volume buttons to smootly increase of decrese the volume of some entity by holding down the corresponding button. The button still feels very responsive given that the first message is sent immediately.
+## Configuration
 
-#### Button type 2
+Required keys:
 
-This button provide more functionality by detecting single clicks, double clicks, multiple clicks (three or more), and long button presses. A single MQTT message is sent to the broker with the message string for the button in question, with "_click", "_double", "_multiple" or "_long" appended at the end. The code is easily modified to distinquis between tripple and quadruple clicks, but this is starting to become hard to physically enter via the remote. The downside of this type is that the hub needs to wait before sending the MQTT message to see if another click is coming, and this makes the button feel less responsive than buttons assigned to type 0 or type 1.
+- `ce_pin`
+- `cs_pin` through the SPI device schema
 
-## Acknowledgements
+Optional keys:
 
-First, I wish to acknowledge the [Hacking the Harmony RF Remote](https://haukcode.wordpress.com/2015/04/16/hacking-the-harmony-rf-remote/) blog post on Hakan's Coding and Stuff. This post gave me crucial pointers early on, especially with the radio hardware. I can also recommend the discussion thread for helpful information on pairing the Harmony Remote with the Logitech Unifying Receiver on a PC if you are looking for a more software-based solution. Second, the [Simple nRF24L01+ 2.4GHz transceiver demo](https://forum.arduino.cc/t/simple-nrf24l01-2-4ghz-transceiver-demo/405123) by Robin2 was tremendously helpful in getting started with the RF24 library for the Arduino, and it inspired the minimalistic SimpleHub implementation.
+- `address`: 40-bit Harmony RF address such as `0xAABBCCDDEE`
+- `channel`: Harmony receive channel override; if omitted, Harmoino uses the saved/discovered channel and otherwise falls back to `5`
+- `probe_on_startup`: defaults to `true`; starts scanning automatically when neither YAML nor saved address is available
+- `probe_timeout`: defaults to `120s`; automatically stops probing if no address is discovered
+- `click_duration`: defaults to `450ms`; minimum hold time before a type `2` command becomes `*_long`
+- `wait_duration`: defaults to `225ms`; maximum quiet gap before a click/hold sequence is considered finished
+- `second_repeat_duration`: defaults to `600ms`; delay before the first repeated event for a held type `1` command
+- `further_repeat_duration`: defaults to `150ms`; repeat interval after held repeats begin for a type `1` command
+- `command_overrides`: rename built-in commands or define metadata for unknown command IDs
+- `event`
+- `discovered_address`
+- `saved_address`
+- `effective_address`
+- `probe_switch`
+- `save_button`
+- `on_event`
+- `on_raw_packet`
+- `on_address_discovered`
+
+### Timing Tuning
+
+These four settings control how Harmoino groups raw Harmony packets into higher-level events:
+
+- `click_duration`: long-press threshold for type `2` commands such as `music`, `tv`, `movie`, and `off`
+- `wait_duration`: gesture gap timeout used to absorb release chatter, keep hold sequences alive, and decide when single/double/multiple clicks are complete
+- `second_repeat_duration`: delay between the initial type `1` event and the first held repeat
+- `further_repeat_duration`: steady-state repeat interval after the first held repeat fires
+
+Current defaults use a balanced profile:
+
+- `click_duration: 450ms`
+- `wait_duration: 225ms`
+- `second_repeat_duration: 600ms`
+- `further_repeat_duration: 150ms`
+
+Practical tuning hints:
+
+- Increase `click_duration` if long presses trigger too easily.
+- Decrease `click_duration` if you need `*_long` to fire sooner.
+- Increase `wait_duration` if double-clicks split into single clicks or held gestures stop too early.
+- Decrease `wait_duration` if click sequences feel sluggish to finalize.
+- Decrease `second_repeat_duration` if held `volume_up` or `channel_down` repeats start too slowly.
+- Adjust `further_repeat_duration` to make held repeats faster or slower once they are already repeating.
+
+Alternative profiles:
+
+- Conservative: `click_duration: 500ms`, `wait_duration: 225ms`, `second_repeat_duration: 700ms`, `further_repeat_duration: 175ms`
+- Snappy: `click_duration: 400ms`, `wait_duration: 180ms`, `second_repeat_duration: 450ms`, `further_repeat_duration: 125ms`
+
+
+### Command Overrides
+
+Use `command_overrides` when you want to rename a built-in Harmony command or define the event behavior for an unknown command ID.
+
+Example:
+
+```yaml
+harmoino:
+  ce_pin: GPIO16
+  cs_pin: GPIO17
+  command_overrides:
+    0x005800C1:
+      name: select
+    0x0001E9C3:
+      name: watch_movie
+    0x00ABCDEF:
+      name: scene
+      type: 2
+```
+
+Notes:
+
+- Existing command IDs can override `name`, `type`, or both.
+- Unknown command IDs must provide both `name` and `type`.
+
+### Event Semantics
+
+Type `0` commands emit a single payload such as `ok`.
+
+Type `1` commands emit an immediate payload and then repeat while held, for example `volume_up`.
+
+Type `2` commands emit one of:
+
+- `*_clicked`
+- `*_double`
+- `*_multiple`
+- `*_long`
+
+The component also emits `sleep` when an explicit Harmony sleep packet is seen or when the remote becomes idle after the awake ping cadence stops.
+
+## Examples
+
+The `examples/` folder contains:
+
+- `harmoino_local_esp32_arduino.yaml`
+- `harmoino_ha_esp32_arduino.yaml`
+
+The first keeps everything local with `on_event` only. The second adds an ESPHome `event` entity for Home Assistant.
+

@@ -1,1 +1,13 @@
+.esphome/
+.pioenvs/
+.piolibdeps/
+.vscode/
+__pycache__/
+*.pyc
+*.log
 HomeAssistantHub/arduino_secrets.h
+*.code-workspace
+log.txt
+README_FULL.md
+examples/harmoino_ha_esp32_arduino.yaml
+examples/harmoino_local_esp32_arduino.yaml
