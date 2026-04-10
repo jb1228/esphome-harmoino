@@ -570,14 +570,26 @@ void Harmoino::process_probe_(uint32_t now_ms) {
 }
 
 void Harmoino::log_radio_snapshot_(const char *context) {
-  const auto snapshot = this->radio_.read_debug_snapshot();
-  ESP_LOGD(TAG,
-           "nRF24L01+ %s: STATUS=0x%02X CONFIG=0x%02X EN_AA=0x%02X EN_RXADDR=0x%02X SETUP_AW=0x%02X "
-           "SETUP_RETR=0x%02X OBSERVE_TX=0x%02X RF_CH=%u RF_SETUP=0x%02X FEATURE=0x%02X DYNPD=0x%02X "
-           "FIFO_STATUS=0x%02X",
-           context, snapshot.status, snapshot.config, snapshot.en_aa, snapshot.en_rxaddr, snapshot.setup_aw,
-           snapshot.setup_retr, snapshot.observe_tx, snapshot.rf_ch, snapshot.rf_setup, snapshot.feature,
-           snapshot.dynpd, snapshot.fifo_status);
+  Nrf24DebugProfile profile = Nrf24DebugProfile::POST_BEGIN;
+  uint8_t expected_channel = 0;
+
+  switch (this->radio_mode_) {
+    case RadioMode::RECEIVER:
+      profile = Nrf24DebugProfile::RECEIVER;
+      expected_channel = this->effective_channel_;
+      break;
+    case RadioMode::PROBE:
+      profile = Nrf24DebugProfile::PROBE;
+      break;
+    case RadioMode::IDLE:
+      profile = Nrf24DebugProfile::IDLE;
+      break;
+  }
+
+  const auto report = this->radio_.build_debug_report(context, profile, expected_channel);
+  for (const auto &line : report.lines) {
+    ESP_LOGD(TAG, "%s", line.c_str());
+  }
 }
 
 }  // namespace esphome::harmoino

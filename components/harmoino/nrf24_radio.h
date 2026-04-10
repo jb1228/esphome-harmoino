@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace esphome::harmoino {
 
@@ -21,6 +23,28 @@ struct Nrf24DebugSnapshot {
   uint8_t feature{0};
   uint8_t dynpd{0};
   uint8_t fifo_status{0};
+};
+
+enum class Nrf24DebugProfile : uint8_t {
+  POST_BEGIN = 0,
+  RECEIVER,
+  PROBE,
+  IDLE,
+};
+
+struct Nrf24RegisterCheck {
+  const char *name{nullptr};
+  bool has_expected{false};
+  uint8_t expected{0};
+  uint8_t actual{0};
+  const char *verdict{nullptr};
+};
+
+struct Nrf24DebugReport {
+  bool healthy{false};
+  std::string summary;
+  std::vector<Nrf24RegisterCheck> checks;
+  std::vector<std::string> lines;
 };
 
 class Nrf24BusInterface {
@@ -61,6 +85,8 @@ class Nrf24Radio {
   void flush_tx();
   void clear_status_flags();
   Nrf24DebugSnapshot read_debug_snapshot();
+  Nrf24DebugReport build_debug_report(const char *context, Nrf24DebugProfile profile,
+                                      uint8_t expected_channel = 0);
 
  protected:
   uint8_t get_status_();

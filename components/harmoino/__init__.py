@@ -55,6 +55,8 @@ def validate_channel(value):
 
 
 def validate_address(value):
+    if value is None or (isinstance(value, str) and value.strip() == ""):
+        return None
     value = cv.hex_uint64_t(value)
     if value == 0 or value > 0xFFFFFFFFFF:
         raise cv.Invalid("address must be a 40-bit non-zero value")
@@ -188,7 +190,7 @@ async def to_code(config):
     ce_pin = await cg.gpio_pin_expression(config[CONF_CE_PIN])
     cg.add(var.set_ce_pin(ce_pin))
     cg.add(var.set_component_key(str(config[CONF_ID])))
-    if CONF_ADDRESS in config:
+    if CONF_ADDRESS in config and config[CONF_ADDRESS] is not None:
         cg.add(var.set_yaml_address(config[CONF_ADDRESS]))
     if CONF_CHANNEL in config:
         cg.add(var.set_yaml_channel(config[CONF_CHANNEL]))

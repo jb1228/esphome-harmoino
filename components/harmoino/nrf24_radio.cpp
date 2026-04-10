@@ -1,5 +1,8 @@
 #include "nrf24_radio.h"
 
+#include <array>
+#include <cstdio>
+
 namespace esphome::harmoino {
 namespace {
 
@@ -48,6 +51,170 @@ constexpr uint8_t RX_EMPTY = 0x01;
 
 constexpr uint8_t EN_DPL = 0x04;
 constexpr uint8_t EN_ACK_PAY = 0x02;
+
+constexpr uint8_t EXPECTED_CONFIG = EN_CRC | CRCO;
+constexpr uint8_t EXPECTED_EN_AA = 0x3F;
+constexpr uint8_t EXPECTED_EN_RXADDR = 0x03;
+constexpr uint8_t EXPECTED_SETUP_AW = 0x03;
+constexpr uint8_t EXPECTED_SETUP_RETR = 0x5F;
+constexpr uint8_t EXPECTED_RF_CH = 0x02;
+constexpr uint8_t EXPECTED_RF_SETUP = 0x0E;
+constexpr uint8_t EXPECTED_FEATURE = 0x00;
+constexpr uint8_t EXPECTED_DYNPD = 0x00;
+constexpr uint8_t EXPECTED_FEATURE_DYNAMIC_PAYLOADS = EN_DPL;
+constexpr uint8_t EXPECTED_FEATURE_ACK_PAYLOAD = EN_DPL | EN_ACK_PAY;
+constexpr uint8_t EXPECTED_DYNPD_ALL_PIPES = 0x3F;
+constexpr uint8_t EXPECTED_CONFIG_RX = EN_CRC | CRCO | PWR_UP | PRIM_RX;
+constexpr uint8_t EXPECTED_CONFIG_TX_STANDBY = EN_CRC | CRCO | PWR_UP;
+
+std::string format_hex_byte(uint8_t value) {
+  char buffer[5];
+  std::snprintf(buffer, sizeof(buffer), "0x%02X", value);
+  return std::string(buffer);
+}
+
+std::string pad_right(const std::string &text, size_t width) {
+  if (text.size() >= width) {
+    return text;
+  }
+  return text + std::string(width - text.size(), ' ');
+}
+
+std::string pad_left(const std::string &text, size_t width) {
+  if (text.size() >= width) {
+    return text;
+  }
+  return std::string(width - text.size(), ' ') + text;
+}
+
+bool has_uniform_readback(const Nrf24DebugSnapshot &snapshot) {
+  return snapshot.status == snapshot.config && snapshot.status == snapshot.en_aa &&
+         snapshot.status == snapshot.en_rxaddr && snapshot.status == snapshot.setup_aw &&
+         snapshot.status == snapshot.setup_retr && snapshot.status == snapshot.observe_tx &&
+         snapshot.status == snapshot.rf_ch && snapshot.status == snapshot.rf_setup &&
+         snapshot.status == snapshot.feature && snapshot.status == snapshot.dynpd &&
+         snapshot.status == snapshot.fifo_status;
+}
+
+bool status_has_reserved_bits(uint8_t value) { return (value & 0x80U) != 0; }
+
+bool feature_has_reserved_bits(uint8_t value) { return (value & 0xF8U) != 0; }
+
+bool dynpd_has_reserved_bits(uint8_t value) { return (value & 0xC0U) != 0; }
+
+bool fifo_status_has_reserved_bits(uint8_t value) { return (value & 0x8CU) != 0; }
+
+Nrf24RegisterCheck make_expected_check(const char *name, uint8_t expected, uint8_t actual) {
+  return Nrf24RegisterCheck{name, true, expected, actual, expected == actual ? "ok" : "mismatch"};
+}
+
+Nrf24RegisterCheck make_status_check(uint8_t actual) {
+  return Nrf24RegisterCheck{"STATUS", false, 0, actual, status_has_reserved_bits(actual) ? "reserved bits" : "info"};
+}
+
+Nrf24RegisterCheck make_fifo_status_check(uint8_t actual) {
+  return Nrf24RegisterCheck{"FIFO_STATUS", false, 0, actual,
+                            fifo_status_has_reserved_bits(actual) ? "reserved bits" : "info"};
+}
+
+std::vector<Nrf24RegisterCheck> build_register_checks(const Nrf24DebugSnapshot &snapshot, Nrf24DebugProfile profile,
+                                                      uint8_t expected_channel) {
+  std::vector<Nrf24RegisterCheck> checks;
+  checks.reserve(11);
+
+  uint8_t config_expected = EXPECTED_CONFIG;
+  uint8_t en_rxaddr_expected = EXPECTED_EN_RXADDR;
+  uint8_t rf_ch_expected = EXPECTED_RF_CH;
+  uint8_t feature_expected = EXPECTED_FEATURE;
+  uint8_t dynpd_expected = EXPECTED_DYNPD;
+
+  switch (profile) {
+    case Nrf24DebugProfile::RECEIVER:
+      config_expected = EXPECTED_CONFIG_RX;
+      en_rxaddr_expected = 0x07;
+      rf_ch_expected = expected_channel;
+      feature_expected = EXPECTED_FEATURE_DYNAMIC_PAYLOADS;
+      dynpd_expected = EXPECTED_DYNPD_ALL_PIPES;
+      break;
+    case Nrf24DebugProfile::PROBE:
+      config_expected = EXPECTED_CONFIG_TX_STANDBY;
+      feature_expected = EXPECTED_FEATURE_ACK_PAYLOAD;
+      dynpd_expected = EXPECTED_DYNPD_ALL_PIPES;
+      break;
+    case Nrf24DebugProfile::IDLE:
+      config_expected = EXPECTED_CONFIG_TX_STANDBY;
+      feature_expected = EXPECTED_FEATURE_DYNAMIC_PAYLOADS;
+      dynpd_expected = EXPECTED_DYNPD_ALL_PIPES;
+      break;
+    case Nrf24DebugProfile::POST_BEGIN:
+    default:
+      break;
+  }
+
+  checks.push_back(make_expected_check("CONFIG", config_expected, snapshot.config));
+  checks.push_back(make_expected_check("EN_AA", EXPECTED_EN_AA, snapshot.en_aa));
+  checks.push_back(make_expected_check("EN_RXADDR", en_rxaddr_expected, snapshot.en_rxaddr));
+  checks.push_back(make_expected_check("SETUP_AW", EXPECTED_SETUP_AW, snapshot.setup_aw));
+  checks.push_back(make_expected_check("SETUP_RETR", EXPECTED_SETUP_RETR, snapshot.setup_retr));
+  checks.push_back(make_expected_check("RF_CH", rf_ch_expected, snapshot.rf_ch));
+  checks.push_back(make_expected_check("RF_SETUP", EXPECTED_RF_SETUP, snapshot.rf_setup));
+  checks.push_back(make_expected_check("FEATURE", feature_expected, snapshot.feature));
+  checks.push_back(make_expected_check("DYNPD", dynpd_expected, snapshot.dynpd));
+  checks.push_back(make_status_check(snapshot.status));
+  checks.push_back(make_fifo_status_check(snapshot.fifo_status));
+  return checks;
+}
+
+bool register_checks_healthy(const std::vector<Nrf24RegisterCheck> &checks) {
+  for (const auto &check : checks) {
+    if (check.has_expected && check.expected != check.actual) {
+      return false;
+    }
+    if (std::string(check.verdict) == "reserved bits") {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string build_summary(const Nrf24DebugSnapshot &snapshot, const std::vector<Nrf24RegisterCheck> &checks) {
+  if (register_checks_healthy(checks)) {
+    return "PASS [register interface responding]";
+  }
+
+  if (has_uniform_readback(snapshot) || status_has_reserved_bits(snapshot.status) ||
+      feature_has_reserved_bits(snapshot.feature) || dynpd_has_reserved_bits(snapshot.dynpd) ||
+      fifo_status_has_reserved_bits(snapshot.fifo_status)) {
+    return "FAIL [likely SPI/chip-select/power issue]";
+  }
+
+  return "FAIL [register readback mismatch]";
+}
+
+std::vector<std::string> build_report_lines(const char *context, const Nrf24DebugSnapshot &snapshot,
+                                            const std::vector<Nrf24RegisterCheck> &checks,
+                                            const std::string &summary) {
+  std::vector<std::string> lines;
+  lines.reserve(checks.size() + 4);
+
+  lines.push_back(std::string("nRF24L01+ ") + context + ": " + summary);
+  lines.push_back(std::string("nRF24L01+ ") + context + ":   " + pad_right("Register", 12) + " " +
+                  pad_right("Expected", 8) + " " + pad_right("Actual", 8) + " Verdict");
+
+  for (const auto &check : checks) {
+    const std::string expected = check.has_expected ? format_hex_byte(check.expected) : "n/a";
+    const std::string actual = format_hex_byte(check.actual);
+    lines.push_back(std::string("nRF24L01+ ") + context + ":   " + pad_right(check.name, 12) + " " +
+                    pad_right(expected, 8) + " " + pad_right(actual, 8) + " " + check.verdict);
+  }
+
+  if (has_uniform_readback(snapshot)) {
+    lines.push_back(std::string("nRF24L01+ ") + context + ":   " + "Note         uniform readback value " +
+                    format_hex_byte(snapshot.status) + " across snapshot registers");
+  }
+
+  return lines;
+}
 
 }  // namespace
 
@@ -257,6 +424,17 @@ Nrf24DebugSnapshot Nrf24Radio::read_debug_snapshot() {
   snapshot.dynpd = this->read_register_(DYNPD);
   snapshot.fifo_status = this->read_register_(FIFO_STATUS);
   return snapshot;
+}
+
+Nrf24DebugReport Nrf24Radio::build_debug_report(const char *context, Nrf24DebugProfile profile,
+                                                uint8_t expected_channel) {
+  Nrf24DebugReport report;
+  const auto snapshot = this->read_debug_snapshot();
+  report.checks = build_register_checks(snapshot, profile, expected_channel);
+  report.healthy = register_checks_healthy(report.checks);
+  report.summary = build_summary(snapshot, report.checks);
+  report.lines = build_report_lines(context, snapshot, report.checks, report.summary);
+  return report;
 }
 
 uint8_t Nrf24Radio::get_status_() {
