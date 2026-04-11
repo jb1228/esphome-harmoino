@@ -27,10 +27,17 @@ struct HarmonyResolvedCommand {
   bool known{false};
 };
 
+enum class HarmonyOutputKind : uint8_t {
+  SEMANTIC = 0,
+  PRESS,
+  RELEASE,
+};
+
 struct HarmonyOutput {
   uint32_t command_id{0};
   std::string payload;
   bool known{false};
+  HarmonyOutputKind kind{HarmonyOutputKind::SEMANTIC};
 };
 
 enum class HarmonyPacketKind : uint8_t {
@@ -103,6 +110,7 @@ class HarmonyDecoder {
 
   bool sequence_active_{false};
   bool pending_release_{false};
+  bool release_emitted_{false};
   bool current_press_hold_seen_{false};
   bool long_emitted_{false};
   bool initial_emitted_{false};

@@ -9,11 +9,39 @@
 
 namespace hc = esphome::harmoino;
 
+struct ExpectedOutput {
+  hc::HarmonyOutputKind kind;
+  std::string payload;
+};
+
 static void expect_payloads(const std::vector<hc::HarmonyOutput> &outputs,
                             const std::vector<std::string> &expected) {
-  assert(outputs.size() == expected.size());
+  std::vector<std::string> actual;
+  for (const auto &output : outputs) {
+    if (output.kind == hc::HarmonyOutputKind::SEMANTIC) {
+      actual.push_back(output.payload);
+    }
+  }
+
+  assert(actual.size() == expected.size());
   for (size_t i = 0; i < expected.size(); i++) {
-    assert(outputs[i].payload == expected[i]);
+    assert(actual[i] == expected[i]);
+  }
+}
+
+static void expect_physical_outputs(const std::vector<hc::HarmonyOutput> &outputs,
+                                    const std::vector<ExpectedOutput> &expected) {
+  std::vector<ExpectedOutput> actual;
+  for (const auto &output : outputs) {
+    if (output.kind != hc::HarmonyOutputKind::SEMANTIC) {
+      actual.push_back({output.kind, output.payload});
+    }
+  }
+
+  assert(actual.size() == expected.size());
+  for (size_t i = 0; i < expected.size(); i++) {
+    assert(actual[i].kind == expected[i].kind);
+    assert(actual[i].payload == expected[i].payload);
   }
 }
 
@@ -22,11 +50,17 @@ static void test_type0_immediate_press() {
   hc::HarmonyDecoder decoder;
   decoder.set_command_resolver(&resolver);
 
-  expect_payloads(decoder.process_command_id(0x005800C1, 0), {});
+  auto outputs = decoder.process_command_id(0x005800C1, 0);
+  expect_physical_outputs(outputs, {{hc::HarmonyOutputKind::PRESS, "ok"}});
+  expect_payloads(outputs, {});
   expect_payloads(decoder.poll(0), {"ok"});
   expect_payloads(decoder.process_command_id(0x000000C1, 40), {});
+  expect_physical_outputs(decoder.poll(99), {});
+  expect_physical_outputs(decoder.poll(101), {{hc::HarmonyOutputKind::RELEASE, "ok"}});
   expect_payloads(decoder.poll(260), {});
-  expect_payloads(decoder.process_command_id(0x005800C1, 300), {});
+  outputs = decoder.process_command_id(0x005800C1, 300);
+  expect_physical_outputs(outputs, {{hc::HarmonyOutputKind::PRESS, "ok"}});
+  expect_payloads(outputs, {});
   expect_payloads(decoder.poll(300), {"ok"});
 }
 
@@ -54,9 +88,13 @@ static void test_type2_single_click() {
   hc::HarmonyDecoder decoder;
   decoder.set_command_resolver(&resolver);
 
-  expect_payloads(decoder.process_command_id(0x0001E9C3, 0), {});
+  auto outputs = decoder.process_command_id(0x0001E9C3, 0);
+  expect_physical_outputs(outputs, {{hc::HarmonyOutputKind::PRESS, "movie"}});
+  expect_payloads(outputs, {});
   expect_payloads(decoder.poll(0), {});
   expect_payloads(decoder.process_command_id(0x000000C3, 50), {});
+  expect_physical_outputs(decoder.poll(109), {});
+  expect_physical_outputs(decoder.poll(111), {{hc::HarmonyOutputKind::RELEASE, "movie"}});
   expect_payloads(decoder.poll(274), {});
   expect_payloads(decoder.poll(276), {"movie_clicked"});
 }
@@ -170,8 +208,12 @@ static void test_release_markers_do_not_emit_unknown_commands() {
   hc::HarmonyDecoder decoder;
   decoder.set_command_resolver(&resolver);
 
-  expect_payloads(decoder.process_command_id(0x000000C1, 0), {});
-  expect_payloads(decoder.process_command_id(0x000000C3, 10), {});
+  auto outputs = decoder.process_command_id(0x000000C1, 0);
+  expect_payloads(outputs, {});
+  expect_physical_outputs(outputs, {});
+  outputs = decoder.process_command_id(0x000000C3, 10);
+  expect_payloads(outputs, {});
+  expect_physical_outputs(outputs, {});
   expect_payloads(decoder.poll(250), {});
 }
 

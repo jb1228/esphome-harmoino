@@ -12,6 +12,7 @@ This component is very much a "work in progress".
   - Automatically probe on startup if no existing address has been provided or saved
 - Automation hook (`on_event`) for processing key presses from remote
   - Normal presses, repeats, click/double/multiple/long, and sleep
+  - Separate `on_press` and `on_release` hooks for physical button transitions
   - Also has raw packet automation hook for protocol debugging
 - Optional ESPHome `event` entity for Home Assistant exposure
 
@@ -66,6 +67,14 @@ harmoino:
     name: Harmony Saved Address
   effective_address:
     name: Harmony Effective Address
+  on_press:
+    - logger.log:
+        format: "Harmony press: %s"
+        args: ["x.c_str()"]
+  on_release:
+    - logger.log:
+        format: "Harmony release: %s"
+        args: ["x.c_str()"]
   on_event:
     - logger.log:
         format: "Harmony event: %s"
@@ -96,6 +105,8 @@ Optional keys:
 - `effective_address`
 - `probe_switch`
 - `save_button`
+- `on_press`
+- `on_release`
 - `on_event`
 - `on_raw_packet`
 - `on_address_discovered`
@@ -157,6 +168,10 @@ Notes:
 - Unknown command IDs must provide both `name` and `type`.
 
 ### Event Semantics
+
+`on_press` emits the physical Harmony command name immediately when a button press starts, for example `volume_up` or `ok`.
+
+`on_release` emits the physical Harmony command name after the release chatter debounce window, using the active command sequence to identify which button was released.
 
 Type `0` commands emit a single payload such as `ok`.
 

@@ -19,6 +19,14 @@ RawPacketTrigger::RawPacketTrigger(Harmoino *parent) {
       [this](const std::vector<uint8_t> &packet, uint8_t pipe_num) { this->trigger(packet, pipe_num); });
 }
 
+HarmoinoPressTrigger::HarmoinoPressTrigger(Harmoino *parent) {
+  parent->add_on_press_callback([this](const std::string &payload) { this->trigger(payload); });
+}
+
+HarmoinoReleaseTrigger::HarmoinoReleaseTrigger(Harmoino *parent) {
+  parent->add_on_release_callback([this](const std::string &payload) { this->trigger(payload); });
+}
+
 HarmoinoEventTrigger::HarmoinoEventTrigger(Harmoino *parent) {
   parent->add_on_event_callback([this](const std::string &payload) { this->trigger(payload); });
 }
@@ -173,6 +181,17 @@ bool Harmoino::has_event_type_(const std::string &payload) const {
 }
 
 void Harmoino::emit_output_(const HarmonyOutput &output) {
+  if (output.kind == HarmonyOutputKind::PRESS) {
+    ESP_LOGD(TAG, "Publishing Harmony press: %s", output.payload.c_str());
+    this->press_callback_.call(output.payload);
+    return;
+  }
+  if (output.kind == HarmonyOutputKind::RELEASE) {
+    ESP_LOGD(TAG, "Publishing Harmony release: %s", output.payload.c_str());
+    this->release_callback_.call(output.payload);
+    return;
+  }
+
   ESP_LOGD(TAG, "Publishing Harmony event: %s", output.payload.c_str());
   this->event_callback_.call(output.payload);
 
@@ -205,10 +224,10 @@ void Harmoino::process_receiver_packets_(uint32_t now_ms) {
     this->radio_.read_payload(packet.data(), packet.size());
     const auto description = describe_harmony_packet(packet, &this->resolver_);
     if (!description.empty()) {
-      ESP_LOGD(TAG, "Raw packet on pipe %u with %u bytes: %s [%s]", pipe_num, payload_size,
+      ESP_LOGV(TAG, "Raw packet on pipe %u with %u bytes: %s [%s]", pipe_num, payload_size,
                format_hex_bytes(packet.data(), packet.size()).c_str(), description.c_str());
     } else {
-      ESP_LOGD(TAG, "Raw packet on pipe %u with %u bytes: %s", pipe_num, payload_size,
+      ESP_LOGI(TAG, "Unknown raw packet on pipe %u with %u bytes: %s", pipe_num, payload_size,
                format_hex_bytes(packet.data(), packet.size()).c_str());
     }
     if (const auto command_id = extract_harmony_command_id(packet); command_id.has_value()) {

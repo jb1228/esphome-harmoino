@@ -152,6 +152,7 @@ HarmonyResolvedCommand HarmonyDecoder::resolve_(uint32_t command_id) const {
 void HarmonyDecoder::begin_sequence_(const HarmonyResolvedCommand &command, uint32_t now_ms) {
   this->sequence_active_ = true;
   this->pending_release_ = false;
+  this->release_emitted_ = false;
   this->current_press_hold_seen_ = false;
   this->long_emitted_ = false;
   this->initial_emitted_ = false;
@@ -169,6 +170,7 @@ void HarmonyDecoder::begin_sequence_(const HarmonyResolvedCommand &command, uint
 void HarmonyDecoder::clear_sequence_() {
   this->sequence_active_ = false;
   this->pending_release_ = false;
+  this->release_emitted_ = false;
   this->current_press_hold_seen_ = false;
   this->long_emitted_ = false;
   this->initial_emitted_ = false;
@@ -238,6 +240,7 @@ std::vector<HarmonyOutput> HarmonyDecoder::handle_press_(uint32_t command_id, ui
 
   if (!this->sequence_active_) {
     this->begin_sequence_(resolved, now_ms);
+    outputs.push_back({resolved.id, resolved.name, resolved.known, HarmonyOutputKind::PRESS});
     return outputs;
   }
 
@@ -249,6 +252,7 @@ std::vector<HarmonyOutput> HarmonyDecoder::handle_press_(uint32_t command_id, ui
       this->clear_sequence_();
     }
     this->begin_sequence_(resolved, now_ms);
+    outputs.push_back({resolved.id, resolved.name, resolved.known, HarmonyOutputKind::PRESS});
     return outputs;
   }
 
@@ -261,6 +265,7 @@ std::vector<HarmonyOutput> HarmonyDecoder::handle_press_(uint32_t command_id, ui
     }
 
     this->pending_release_ = false;
+    this->release_emitted_ = false;
     this->current_press_hold_seen_ = false;
     this->last_press_ms_ = now_ms;
     this->last_related_ms_ = now_ms;
@@ -269,6 +274,7 @@ std::vector<HarmonyOutput> HarmonyDecoder::handle_press_(uint32_t command_id, ui
     this->initial_emitted_ = false;
     this->repeat_stage_ = 0;
     this->next_repeat_ms_ = 0;
+    outputs.push_back({resolved.id, resolved.name, resolved.known, HarmonyOutputKind::PRESS});
     return outputs;
   }
 
@@ -290,6 +296,7 @@ std::vector<HarmonyOutput> HarmonyDecoder::handle_release_(uint32_t command_id, 
   }
 
   this->pending_release_ = true;
+  this->release_emitted_ = false;
   this->last_release_ms_ = now_ms;
   this->last_related_ms_ = now_ms;
   return {};
@@ -376,6 +383,13 @@ std::vector<HarmonyOutput> HarmonyDecoder::poll(uint32_t now_ms) {
   std::vector<HarmonyOutput> outputs;
 
   if (this->sequence_active_) {
+    if (this->pending_release_ && !this->release_emitted_ &&
+        (now_ms - this->last_release_ms_) > RELEASE_CHATTER_MAX_GAP_MS) {
+      outputs.push_back(
+          {this->current_command_.id, this->current_command_.name, this->current_command_.known, HarmonyOutputKind::RELEASE});
+      this->release_emitted_ = true;
+    }
+
     if (this->current_command_.type <= 1) {
       if (!this->initial_emitted_) {
         outputs.push_back({this->current_command_.id, this->current_command_.name, this->current_command_.known});
