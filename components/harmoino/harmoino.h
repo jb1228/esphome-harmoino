@@ -23,13 +23,9 @@ class RawPacketTrigger : public Trigger<std::vector<uint8_t>, uint8_t> {
  public:
   explicit RawPacketTrigger(Harmoino *parent);
 };
-class HarmoinoPressTrigger : public Trigger<std::string> {
+class HarmoinoRawEventTrigger : public Trigger<std::string, std::string, int32_t> {
  public:
-  explicit HarmoinoPressTrigger(Harmoino *parent);
-};
-class HarmoinoReleaseTrigger : public Trigger<std::string> {
- public:
-  explicit HarmoinoReleaseTrigger(Harmoino *parent);
+  explicit HarmoinoRawEventTrigger(Harmoino *parent);
 };
 class HarmoinoEventTrigger : public Trigger<std::string> {
  public:
@@ -105,11 +101,8 @@ class Harmoino : public Component, public HarmoinoSPIDevice, public Nrf24BusInte
   void add_on_raw_packet_callback(std::function<void(const std::vector<uint8_t> &, uint8_t)> &&callback) {
     this->raw_packet_callback_.add(std::move(callback));
   }
-  void add_on_press_callback(std::function<void(const std::string &)> &&callback) {
-    this->press_callback_.add(std::move(callback));
-  }
-  void add_on_release_callback(std::function<void(const std::string &)> &&callback) {
-    this->release_callback_.add(std::move(callback));
+  void add_on_raw_event_callback(std::function<void(const std::string &, const std::string &, int32_t)> &&callback) {
+    this->raw_event_callback_.add(std::move(callback));
   }
   void add_on_event_callback(std::function<void(const std::string &)> &&callback) {
     this->event_callback_.add(std::move(callback));
@@ -214,8 +207,7 @@ class Harmoino : public Component, public HarmoinoSPIDevice, public Nrf24BusInte
   HarmoinoProbeSwitch *probe_switch_{nullptr};
 
   CallbackManager<void(const std::vector<uint8_t> &, uint8_t)> raw_packet_callback_;
-  CallbackManager<void(const std::string &)> press_callback_;
-  CallbackManager<void(const std::string &)> release_callback_;
+  CallbackManager<void(const std::string &, const std::string &, int32_t)> raw_event_callback_;
   CallbackManager<void(const std::string &)> event_callback_;
   CallbackManager<void(const std::string &)> address_callback_;
 };

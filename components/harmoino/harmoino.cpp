@@ -19,12 +19,10 @@ RawPacketTrigger::RawPacketTrigger(Harmoino *parent) {
       [this](const std::vector<uint8_t> &packet, uint8_t pipe_num) { this->trigger(packet, pipe_num); });
 }
 
-HarmoinoPressTrigger::HarmoinoPressTrigger(Harmoino *parent) {
-  parent->add_on_press_callback([this](const std::string &payload) { this->trigger(payload); });
-}
-
-HarmoinoReleaseTrigger::HarmoinoReleaseTrigger(Harmoino *parent) {
-  parent->add_on_release_callback([this](const std::string &payload) { this->trigger(payload); });
+HarmoinoRawEventTrigger::HarmoinoRawEventTrigger(Harmoino *parent) {
+  parent->add_on_raw_event_callback([this](const std::string &code, const std::string &name, int32_t value) {
+    this->trigger(code, name, value);
+  });
 }
 
 HarmoinoEventTrigger::HarmoinoEventTrigger(Harmoino *parent) {
@@ -181,14 +179,12 @@ bool Harmoino::has_event_type_(const std::string &payload) const {
 }
 
 void Harmoino::emit_output_(const HarmonyOutput &output) {
-  if (output.kind == HarmonyOutputKind::PRESS) {
-    ESP_LOGD(TAG, "Publishing Harmony press: %s", output.payload.c_str());
-    this->press_callback_.call(output.payload);
-    return;
-  }
-  if (output.kind == HarmonyOutputKind::RELEASE) {
-    ESP_LOGD(TAG, "Publishing Harmony release: %s", output.payload.c_str());
-    this->release_callback_.call(output.payload);
+  if (output.kind == HarmonyOutputKind::PRESS || output.kind == HarmonyOutputKind::RELEASE) {
+    const std::string code = "0x" + format_hex_value(output.command_id, 8);
+    const int32_t value = output.kind == HarmonyOutputKind::PRESS ? 1 : 0;
+    ESP_LOGD(TAG, "Publishing Harmony raw event: code=%s name=%s value=%d", code.c_str(), output.payload.c_str(),
+             value);
+    this->raw_event_callback_.call(code, output.payload, value);
     return;
   }
 

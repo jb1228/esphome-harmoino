@@ -19,8 +19,7 @@ CONF_EVENT_ENTITY = "event"
 CONF_FURTHER_REPEAT_DURATION = "further_repeat_duration"
 CONF_ON_ADDRESS_DISCOVERED = "on_address_discovered"
 CONF_ON_EVENT = "on_event"
-CONF_ON_PRESS = "on_press"
-CONF_ON_RELEASE = "on_release"
+CONF_ON_RAW_EVENT = "on_raw_event"
 CONF_ON_RAW_PACKET = "on_raw_packet"
 CONF_PROBE_BUTTON = "probe_button"
 CONF_PROBE_ON_STARTUP = "probe_on_startup"
@@ -37,11 +36,9 @@ Harmoino = harmoino_ns.class_("Harmoino", cg.Component, spi.SPIDevice)
 RawPacketTrigger = harmoino_ns.class_(
     "RawPacketTrigger", automation.Trigger.template(cg.std_vector.template(cg.uint8), cg.uint8)
 )
-HarmoinoPressTrigger = harmoino_ns.class_(
-    "HarmoinoPressTrigger", automation.Trigger.template(cg.std_string)
-)
-HarmoinoReleaseTrigger = harmoino_ns.class_(
-    "HarmoinoReleaseTrigger", automation.Trigger.template(cg.std_string)
+HarmoinoRawEventTrigger = harmoino_ns.class_(
+    "HarmoinoRawEventTrigger",
+    automation.Trigger.template(cg.std_string, cg.std_string, cg.int32),
 )
 HarmoinoEventTrigger = harmoino_ns.class_(
     "HarmoinoEventTrigger", automation.Trigger.template(cg.std_string)
@@ -164,14 +161,11 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_PROBE_ON_STARTUP, default=True): cv.boolean,
             cv.Optional(CONF_PROBE_TIMEOUT, default="120s"): cv.positive_time_period_milliseconds,
-            cv.Optional(CONF_ON_PRESS): automation.validate_automation(
+            cv.Optional(CONF_ON_RAW_EVENT): automation.validate_automation(
                 {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(HarmoinoPressTrigger),
-                }
-            ),
-            cv.Optional(CONF_ON_RELEASE): automation.validate_automation(
-                {
-                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(HarmoinoReleaseTrigger),
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        HarmoinoRawEventTrigger
+                    ),
                 }
             ),
             cv.Optional(CONF_ON_EVENT): automation.validate_automation(
@@ -234,15 +228,16 @@ async def to_code(config):
             )
         )
 
-    for automation_conf in config.get(CONF_ON_PRESS, []):
+    for automation_conf in config.get(CONF_ON_RAW_EVENT, []):
         trigger = cg.new_Pvariable(automation_conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(
-            trigger, [(cg.std_string, "x")], automation_conf
-        )
-    for automation_conf in config.get(CONF_ON_RELEASE, []):
-        trigger = cg.new_Pvariable(automation_conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(
-            trigger, [(cg.std_string, "x")], automation_conf
+            trigger,
+            [
+                (cg.std_string, "code"),
+                (cg.std_string, "name"),
+                (cg.int32, "value"),
+            ],
+            automation_conf,
         )
     for automation_conf in config.get(CONF_ON_EVENT, []):
         trigger = cg.new_Pvariable(automation_conf[CONF_TRIGGER_ID], var)
