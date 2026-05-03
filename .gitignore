@@ -11,3 +11,5 @@ log.txt
 README_FULL.md
 examples/harmoino_ha_esp32_arduino.yaml
 examples/harmoino_local_esp32_arduino.yaml
+/original/
+/tests/

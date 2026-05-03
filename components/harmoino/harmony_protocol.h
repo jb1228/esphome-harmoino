@@ -31,6 +31,7 @@ enum class HarmonyOutputKind : uint8_t {
   SEMANTIC = 0,
   PRESS,
   RELEASE,
+  RAW_EVENT,
 };
 
 struct HarmonyOutput {

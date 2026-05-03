@@ -321,7 +321,7 @@ std::vector<HarmonyOutput> HarmonyDecoder::handle_ping_(uint32_t now_ms) {
   this->awake_ = true;
   this->ping_observed_ = true;
   this->last_activity_ms_ = now_ms;
-  return {};
+  return {{HARMONY_PING, "ping", true, HarmonyOutputKind::RAW_EVENT}};
 }
 
 std::vector<HarmonyOutput> HarmonyDecoder::handle_sleep_(uint32_t now_ms) {

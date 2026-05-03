@@ -11,25 +11,32 @@ DEPENDENCIES = ["spi"]
 MULTI_CONF = True
 
 CONF_CE_PIN = "ce_pin"
-CONF_CLICK_DURATION = "click_duration"
+
 CONF_COMMAND_OVERRIDES = "command_overrides"
-CONF_DISCOVERED_ADDRESS = "discovered_address"
-CONF_EFFECTIVE_ADDRESS = "effective_address"
+CONF_TYPE = "type"
+
 CONF_EVENT_ENTITY = "event"
+
+CONF_CLICK_DURATION = "click_duration"
+CONF_WAIT_DURATION = "wait_duration"
+CONF_SECOND_REPEAT_DURATION = "second_repeat_duration"
 CONF_FURTHER_REPEAT_DURATION = "further_repeat_duration"
-CONF_ON_ADDRESS_DISCOVERED = "on_address_discovered"
-CONF_ON_EVENT = "on_event"
-CONF_ON_RAW_EVENT = "on_raw_event"
-CONF_ON_RAW_PACKET = "on_raw_packet"
+
+CONF_SAVE_BUTTON = "save_button"
 CONF_PROBE_BUTTON = "probe_button"
 CONF_PROBE_ON_STARTUP = "probe_on_startup"
 CONF_PROBE_SWITCH = "probe_switch"
 CONF_PROBE_TIMEOUT = "probe_timeout"
-CONF_SAVE_BUTTON = "save_button"
+
 CONF_SAVED_ADDRESS = "saved_address"
-CONF_SECOND_REPEAT_DURATION = "second_repeat_duration"
-CONF_TYPE = "type"
-CONF_WAIT_DURATION = "wait_duration"
+CONF_DISCOVERED_ADDRESS = "discovered_address"
+CONF_EFFECTIVE_ADDRESS = "effective_address"
+
+CONF_ON_ADDRESS_DISCOVERED = "on_address_discovered"
+CONF_ON_EVENT = "on_event"
+CONF_ON_RAW_EVENT = "on_raw_event"
+CONF_ON_RAW_PACKET = "on_raw_packet"
+
 
 harmoino_ns = cg.esphome_ns.namespace("harmoino")
 Harmoino = harmoino_ns.class_("Harmoino", cg.Component, spi.SPIDevice)

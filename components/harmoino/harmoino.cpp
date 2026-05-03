@@ -179,9 +179,10 @@ bool Harmoino::has_event_type_(const std::string &payload) const {
 }
 
 void Harmoino::emit_output_(const HarmonyOutput &output) {
-  if (output.kind == HarmonyOutputKind::PRESS || output.kind == HarmonyOutputKind::RELEASE) {
+  if (output.kind == HarmonyOutputKind::PRESS || output.kind == HarmonyOutputKind::RELEASE ||
+      output.kind == HarmonyOutputKind::RAW_EVENT) {
     const std::string code = "0x" + format_hex_value(output.command_id, 8);
-    const int32_t value = output.kind == HarmonyOutputKind::PRESS ? 1 : 0;
+    const int32_t value = output.kind == HarmonyOutputKind::RELEASE ? 0 : 1;
     ESP_LOGD(TAG, "Publishing Harmony raw event: code=%s name=%s value=%d", code.c_str(), output.payload.c_str(),
              value);
     this->raw_event_callback_.call(code, output.payload, value);
