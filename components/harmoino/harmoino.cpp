@@ -142,11 +142,11 @@ void Harmoino::dump_config() {
     ESP_LOGCONFIG(TAG, "  Discovered Channel: none");
   }
   ESP_LOGCONFIG(TAG, "  Effective Channel: %u", this->effective_channel_);
-  ESP_LOGCONFIG(TAG, "  Long Press Threshold (click_duration): %u ms", this->click_duration_ms_);
-  ESP_LOGCONFIG(TAG, "  Gesture Gap Timeout (wait_duration): %u ms", this->wait_duration_ms_);
-  ESP_LOGCONFIG(TAG, "  First Repeat Delay (second_repeat_duration): %u ms", this->second_repeat_duration_ms_);
-  ESP_LOGCONFIG(TAG, "  Repeat Interval (further_repeat_duration): %u ms", this->further_repeat_duration_ms_);
-  ESP_LOGCONFIG(TAG, "  Probe Timeout: %u ms", this->probe_timeout_ms_);
+  ESP_LOGCONFIG(TAG, "  Long Press Threshold (click_duration): %lu ms", this->click_duration_ms_);
+  ESP_LOGCONFIG(TAG, "  Gesture Gap Timeout (wait_duration): %lu ms", this->wait_duration_ms_);
+  ESP_LOGCONFIG(TAG, "  First Repeat Delay (second_repeat_duration): %lu ms", this->second_repeat_duration_ms_);
+  ESP_LOGCONFIG(TAG, "  Repeat Interval (further_repeat_duration): %lu ms", this->further_repeat_duration_ms_);
+  ESP_LOGCONFIG(TAG, "  Probe Timeout: %lu ms", this->probe_timeout_ms_);
   ESP_LOGCONFIG(TAG, "  Probe On Startup: %s", YESNO(this->probe_on_startup_));
   ESP_LOGCONFIG(TAG, "  Probe Active: %s", YESNO(this->probing_));
   this->log_radio_snapshot_("dump");
@@ -183,7 +183,7 @@ void Harmoino::emit_output_(const HarmonyOutput &output) {
       output.kind == HarmonyOutputKind::RAW_EVENT) {
     const std::string code = "0x" + format_hex_value(output.command_id, 8);
     const int32_t value = output.kind == HarmonyOutputKind::RELEASE ? 0 : 1;
-    ESP_LOGD(TAG, "Publishing Harmony raw event: code=%s name=%s value=%d", code.c_str(), output.payload.c_str(),
+    ESP_LOGD(TAG, "Publishing Harmony raw event: code=%s name=%s value=%ld", code.c_str(), output.payload.c_str(),
              value);
     this->raw_event_callback_.call(code, output.payload, value);
     return;
@@ -196,7 +196,7 @@ void Harmoino::emit_output_(const HarmonyOutput &output) {
     return;
   }
   if (!this->has_event_type_(output.payload)) {
-    ESP_LOGW(TAG, "Skipping unmapped event entity payload '%s' for command 0x%08X", output.payload.c_str(),
+    ESP_LOGW(TAG, "Skipping unmapped event entity payload '%s' for command 0x%08lX", output.payload.c_str(),
              output.command_id);
     return;
   }
@@ -516,7 +516,7 @@ void Harmoino::save_discovered_address() {
 
 void Harmoino::process_probe_(uint32_t now_ms) {
   if (this->probe_timeout_ms_ > 0 && (now_ms - this->probe_started_ms_) >= this->probe_timeout_ms_) {
-    ESP_LOGW(TAG, "Harmony address probe timed out after %u ms", this->probe_timeout_ms_);
+    ESP_LOGW(TAG, "Harmony address probe timed out after %lu ms", this->probe_timeout_ms_);
     this->stop_probe();
     return;
   }
