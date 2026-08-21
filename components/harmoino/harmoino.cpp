@@ -33,6 +33,11 @@ AddressTrigger::AddressTrigger(Harmoino *parent) {
   parent->add_on_address_discovered_callback([this](const std::string &address) { this->trigger(address); });
 }
 
+HarmoinoStatusTrigger::HarmoinoStatusTrigger(Harmoino *parent) {
+  parent->add_on_status_callback(
+      [this](const std::string &status, const std::string &message) { this->trigger(status, message); });
+}
+
 void HarmoinoProbeButton::press_action() {
   if (this->parent_ != nullptr) {
     this->parent_->start_probe();
@@ -59,8 +64,10 @@ void HarmoinoSaveButton::press_action() {
 }
 
 void Harmoino::setup() {
+  this->publish_status_("initializing", "Initializing Harmony receiver");
   if (this->ce_pin_ == nullptr) {
     ESP_LOGE(TAG, "Missing CE pin configuration");
+    this->publish_status_("error", "Missing CE pin configuration");
     this->mark_failed();
     return;
   }
@@ -250,16 +257,19 @@ bool Harmoino::initialize_receiver_mode_() {
 
   if (!this->radio_.begin()) {
     ESP_LOGE(TAG, "nRF24L01+ radio hardware not responding");
+    this->publish_status_("error", "nRF24L01+ radio hardware not responding");
     this->mark_failed();
     return false;
   }
   if (!this->radio_.set_data_rate_2mbps()) {
     ESP_LOGE(TAG, "Unable to set nRF24L01+ data rate to 2Mbps");
+    this->publish_status_("error", "Unable to set nRF24L01+ data rate to 2Mbps");
     this->mark_failed();
     return false;
   }
   if (!this->radio_.enable_dynamic_payloads()) {
     ESP_LOGE(TAG, "Unable to enable nRF24L01+ dynamic payloads");
+    this->publish_status_("error", "Unable to enable nRF24L01+ dynamic payloads");
     this->mark_failed();
     return false;
   }
@@ -272,6 +282,7 @@ bool Harmoino::initialize_receiver_mode_() {
   this->radio_mode_ = RadioMode::RECEIVER;
   ESP_LOGI(TAG, "Listening for Harmony packets on %s channel %u", format_address_text(this->effective_address_).c_str(),
            this->effective_channel_);
+  this->publish_status_("ready", "Listening for Harmony packets");
   return true;
 }
 
@@ -280,16 +291,19 @@ bool Harmoino::initialize_probe_mode_() {
 
   if (!this->radio_.begin()) {
     ESP_LOGE(TAG, "nRF24L01+ radio hardware not responding");
+    this->publish_status_("error", "nRF24L01+ radio hardware not responding");
     this->mark_failed();
     return false;
   }
   if (!this->radio_.set_data_rate_2mbps()) {
     ESP_LOGE(TAG, "Unable to set nRF24L01+ data rate to 2Mbps");
+    this->publish_status_("error", "Unable to set nRF24L01+ data rate to 2Mbps");
     this->mark_failed();
     return false;
   }
   if (!this->radio_.enable_ack_payload()) {
     ESP_LOGE(TAG, "Unable to enable nRF24L01+ ACK payload support");
+    this->publish_status_("error", "Unable to enable nRF24L01+ ACK payload support");
     this->mark_failed();
     return false;
   }
@@ -299,6 +313,7 @@ bool Harmoino::initialize_probe_mode_() {
   this->radio_.stop_listening();
   this->radio_mode_ = RadioMode::PROBE;
   ESP_LOGI(TAG, "Scanning Harmony pairing channels; press the pair/reset button on the hub now");
+  this->publish_status_("initializing", "Scanning for a Harmony RF address");
   return true;
 }
 
@@ -307,16 +322,19 @@ bool Harmoino::initialize_idle_mode_() {
 
   if (!this->radio_.begin()) {
     ESP_LOGE(TAG, "nRF24L01+ radio hardware not responding");
+    this->publish_status_("error", "nRF24L01+ radio hardware not responding");
     this->mark_failed();
     return false;
   }
   if (!this->radio_.set_data_rate_2mbps()) {
     ESP_LOGE(TAG, "Unable to set nRF24L01+ data rate to 2Mbps");
+    this->publish_status_("error", "Unable to set nRF24L01+ data rate to 2Mbps");
     this->mark_failed();
     return false;
   }
   if (!this->radio_.enable_dynamic_payloads()) {
     ESP_LOGE(TAG, "Unable to enable nRF24L01+ dynamic payloads");
+    this->publish_status_("error", "Unable to enable nRF24L01+ dynamic payloads");
     this->mark_failed();
     return false;
   }
@@ -325,6 +343,7 @@ bool Harmoino::initialize_idle_mode_() {
   this->radio_.stop_listening();
   this->radio_mode_ = RadioMode::IDLE;
   ESP_LOGI(TAG, "No active Harmony address configured; receiver idle until probe/save or YAML address is provided");
+  this->publish_status_("disconnected", "No active Harmony RF address configured");
   return true;
 }
 
@@ -606,6 +625,15 @@ void Harmoino::log_radio_snapshot_(const char *context) {
   for (const auto &line : report.lines) {
     ESP_LOGD(TAG, "%s", line.c_str());
   }
+}
+
+void Harmoino::publish_status_(const std::string &status, const std::string &message) {
+  if (status == this->current_status_ && message == this->current_status_message_)
+    return;
+  this->current_status_ = status;
+  this->current_status_message_ = message;
+  ESP_LOGD(TAG, "Harmony receiver status: %s%s%s", status.c_str(), message.empty() ? "" : " - ", message.c_str());
+  this->status_callback_.call(this->current_status_, this->current_status_message_);
 }
 
 }  // namespace esphome::harmoino

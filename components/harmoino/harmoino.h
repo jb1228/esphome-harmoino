@@ -35,6 +35,10 @@ class AddressTrigger : public Trigger<std::string> {
  public:
   explicit AddressTrigger(Harmoino *parent);
 };
+class HarmoinoStatusTrigger : public Trigger<std::string, std::string> {
+ public:
+  explicit HarmoinoStatusTrigger(Harmoino *parent);
+};
 
 class HarmoinoEventEntity : public event::Event {};
 class HarmoinoAddressTextSensor : public text_sensor::TextSensor {};
@@ -110,6 +114,11 @@ class Harmoino : public Component, public HarmoinoSPIDevice, public Nrf24BusInte
   void add_on_address_discovered_callback(std::function<void(const std::string &)> &&callback) {
     this->address_callback_.add(std::move(callback));
   }
+  void add_on_status_callback(std::function<void(const std::string &, const std::string &)> &&callback) {
+    this->status_callback_.add(std::move(callback));
+  }
+  const std::string &get_status() const { return this->current_status_; }
+  const std::string &get_status_message() const { return this->current_status_message_; }
 
   void begin_transaction() override { this->enable(); }
   void end_transaction() override { this->disable(); }
@@ -158,6 +167,7 @@ class Harmoino : public Component, public HarmoinoSPIDevice, public Nrf24BusInte
   bool load_saved_channel_();
   bool persist_saved_channel_();
   void log_radio_snapshot_(const char *context);
+  void publish_status_(const std::string &status, const std::string &message = "");
 
   static constexpr uint8_t CHANNELS[12] = {5, 8, 14, 17, 32, 35, 41, 44, 62, 65, 71, 74};
   static constexpr uint64_t PAIRING_ADDRESS = 0xBB0ADCA575ULL;
@@ -210,6 +220,9 @@ class Harmoino : public Component, public HarmoinoSPIDevice, public Nrf24BusInte
   CallbackManager<void(const std::string &, const std::string &, int32_t)> raw_event_callback_;
   CallbackManager<void(const std::string &)> event_callback_;
   CallbackManager<void(const std::string &)> address_callback_;
+  CallbackManager<void(const std::string &, const std::string &)> status_callback_;
+  std::string current_status_{"initializing"};
+  std::string current_status_message_{"Harmony receiver has not completed setup"};
 };
 
 }  // namespace esphome::harmoino

@@ -36,6 +36,7 @@ CONF_ON_ADDRESS_DISCOVERED = "on_address_discovered"
 CONF_ON_EVENT = "on_event"
 CONF_ON_RAW_EVENT = "on_raw_event"
 CONF_ON_RAW_PACKET = "on_raw_packet"
+CONF_ON_STATUS = "on_status"
 
 
 harmoino_ns = cg.esphome_ns.namespace("harmoino")
@@ -52,6 +53,9 @@ HarmoinoEventTrigger = harmoino_ns.class_(
 )
 AddressTrigger = harmoino_ns.class_(
     "AddressTrigger", automation.Trigger.template(cg.std_string)
+)
+HarmoinoStatusTrigger = harmoino_ns.class_(
+    "HarmoinoStatusTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
 )
 HarmoinoEventEntity = harmoino_ns.class_("HarmoinoEventEntity", event.Event)
 HarmoinoAddressTextSensor = harmoino_ns.class_(
@@ -190,6 +194,13 @@ CONFIG_SCHEMA = (
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(AddressTrigger),
                 }
             ),
+            cv.Optional(CONF_ON_STATUS): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        HarmoinoStatusTrigger
+                    ),
+                }
+            ),
         }
     )
     .extend(cv.COMPONENT_SCHEMA)
@@ -262,6 +273,13 @@ async def to_code(config):
         trigger = cg.new_Pvariable(automation_conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(
             trigger, [(cg.std_string, "x")], automation_conf
+        )
+    for automation_conf in config.get(CONF_ON_STATUS, []):
+        trigger = cg.new_Pvariable(automation_conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(
+            trigger,
+            [(cg.std_string, "status"), (cg.std_string, "message")],
+            automation_conf,
         )
 
     event_types = build_event_types(config[CONF_COMMAND_OVERRIDES])
